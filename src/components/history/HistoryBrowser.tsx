@@ -189,11 +189,35 @@ export function HistoryBrowser() {
     }
   };
 
-  const handleSelectAudioFile = (item: HistoryItem) => {
+  const handleSelectAudioFile = async (item: HistoryItem) => {
     if (item.type === 'audio') {
       // Set this audio file as the current one
       setCurrentAudioFile(item.metadata);
-      // Switch to transcribe tab
+      
+      // Fetch existing transcription if it exists
+      try {
+        const { data: transcriptions, error } = await supabase
+          .from('transcriptions')
+          .select('*')
+          .eq('audio_file_id', item.metadata.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (error) {
+          console.error('Error fetching transcription:', error);
+        } else if (transcriptions && transcriptions.length > 0) {
+          // Set the transcription if it exists
+          setCurrentTranscription(transcriptions[0]);
+        } else {
+          // Clear transcription if none exists
+          setCurrentTranscription(null);
+        }
+      } catch (error) {
+        console.error('Error fetching transcription:', error);
+        setCurrentTranscription(null);
+      }
+      
+      // Switch to transcribe tab to view the file
       setActiveTab('transcribe');
     }
   };
@@ -308,8 +332,8 @@ export function HistoryBrowser() {
                   {item.type === 'audio' && (
                     <button
                       onClick={() => handleSelectAudioFile(item)}
-                      className="text-gray-400 hover:text-green-600 p-2 rounded-lg hover:bg-green-50 transition-colors"
-                      title="Select for Transcription"
+                      className="text-gray-400 hover:text-blue-600 p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                      title="View Audio File"
                     >
                       <Play size={16} />
                     </button>

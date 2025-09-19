@@ -2,23 +2,16 @@ import React from 'react';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from './hooks/useAuth';
 import { useAppStore } from './store/useAppStore';
-import { useDirectTranscription } from './hooks/useDirectTranscription';
 import { Header } from './components/layout/Header';
 import { TabNavigation } from './components/layout/TabNavigation';
 import { AuthModal } from './components/auth/AuthModal';
-import { AudioUploader } from './components/audio/AudioUploader';
-import { AudioRecorder } from './components/audio/AudioRecorder';
-import { TranscriptionViewer } from './components/transcription/TranscriptionViewer';
-import { AnalysisPanel } from './components/analysis/AnalysisPanel';
-import { HistoryBrowser } from './components/history/HistoryBrowser';
+import { MainWorkflow } from './components/main/MainWorkflow';
+import { SimpleHistoryBrowser } from './components/history/SimpleHistoryBrowser';
 
 function App() {
   const { isAuthenticated } = useAuth();
-  const { transcribeAudio, isTranscribing, progress } = useDirectTranscription();
   const { 
     activeTab, 
-    currentAudioFile, 
-    currentTranscription,
     showAuthModal,
     setShowAuthModal 
   } = useAppStore();
@@ -47,111 +40,14 @@ function App() {
     }
 
     switch (activeTab) {
-      case 'upload':
-        return (
-          <div className="space-y-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Upload Audio File</h2>
-              <p className="text-gray-600">
-                Upload your audio file to get started with transcription and AI analysis.
-              </p>
-            </div>
-            <AudioUploader />
-          </div>
-        );
-
-      case 'record':
-        return (
-          <div className="space-y-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Record Audio</h2>
-              <p className="text-gray-600">
-                Record audio directly from your microphone for transcription and analysis.
-              </p>
-            </div>
-            <AudioRecorder />
-          </div>
-        );
-
-      case 'transcribe':
-        return (
-          <div className="space-y-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Transcription</h2>
-              <p className="text-gray-600">
-                {currentAudioFile ? 
-                  `Transcribing: ${currentAudioFile.filename}` :
-                  'No audio file selected for transcription.'
-                }
-              </p>
-            </div>
-            {currentTranscription ? (
-              <TranscriptionViewer transcription={currentTranscription} />
-            ) : currentAudioFile ? (
-              <div className="text-center py-12">
-                <p className="text-gray-600 mb-4">Ready to transcribe your audio file.</p>
-                <div className="space-y-4">
-                  <button 
-                    onClick={() => transcribeAudio(currentAudioFile.id)}
-                    disabled={isTranscribing}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-medium transition-colors"
-                  >
-                    {isTranscribing ? `Transcribing... ${progress}%` : 'Start Transcription'}
-                  </button>
-                  {isTranscribing && (
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${progress}%` }}
-                      ></div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-gray-600">Please upload or record an audio file first.</p>
-              </div>
-            )}
-          </div>
-        );
-
-      case 'analyze':
-        return (
-          <div className="space-y-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">AI Analysis</h2>
-              <p className="text-gray-600">
-                {currentTranscription ? 
-                  'Analyze your transcription with AI-powered insights.' :
-                  'Complete transcription first to enable AI analysis.'
-                }
-              </p>
-            </div>
-            {currentTranscription ? (
-              <AnalysisPanel 
-                transcriptionId={currentTranscription.id}
-                onAnalysisComplete={(analysis) => {
-                  console.log('Analysis completed:', analysis);
-                }}
-              />
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-gray-600">Please complete transcription first.</p>
-              </div>
-            )}
-          </div>
-        );
+      case 'main':
+        return <MainWorkflow />;
 
       case 'history':
-        return (
-          <div className="space-y-6">
-            <HistoryBrowser />
-          </div>
-        );
+        return <SimpleHistoryBrowser />;
 
       default:
-        return null;
+        return <MainWorkflow />;
     }
   };
 

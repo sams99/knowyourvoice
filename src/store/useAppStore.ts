@@ -86,8 +86,8 @@ interface AppState {
   showAuthModal: boolean;
   setShowAuthModal: (show: boolean) => void;
 
-  activeTab: 'upload' | 'record' | 'transcribe' | 'analyze' | 'history';
-  setActiveTab: (tab: 'upload' | 'record' | 'transcribe' | 'analyze' | 'history') => void;
+  activeTab: 'main' | 'history';
+  setActiveTab: (tab: 'main' | 'history') => void;
 
   // Error handling
   error: string | null;
@@ -145,7 +145,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   showAuthModal: false,
   setShowAuthModal: (show) => set({ showAuthModal: show }),
 
-  activeTab: 'upload',
+  activeTab: 'main',
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   // Error handling

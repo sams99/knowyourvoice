@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Brain, Sparkles, Send, Clock, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Brain, Sparkles, Send, Clock, Zap, History } from 'lucide-react';
 import { useDirectAnalysis, ANALYSIS_PROMPTS } from '../../hooks/useDirectAnalysis';
+import { useAppStore } from '../../store/useAppStore';
 import { formatDistanceToNow } from 'date-fns';
 
 interface AnalysisPanelProps {
@@ -12,8 +13,34 @@ export function AnalysisPanel({ transcriptionId, onAnalysisComplete }: AnalysisP
   const [selectedPromptType, setSelectedPromptType] = useState<keyof typeof ANALYSIS_PROMPTS>('summary');
   const [customPrompt, setCustomPrompt] = useState('');
   const [currentAnalysis, setCurrentAnalysis] = useState<any>(null);
+  const [analysisHistory, setAnalysisHistory] = useState<any[]>([]);
   
-  const { analyzeTranscription, isAnalyzing, progress } = useDirectAnalysis();
+  const { analyzeTranscription, isAnalyzing, progress, getAnalysisHistory } = useDirectAnalysis();
+  const { currentAnalysis: storeAnalysis } = useAppStore();
+
+  // Load existing analyses when component mounts or transcription changes
+  useEffect(() => {
+    const loadAnalysisHistory = async () => {
+      try {
+        const history = await getAnalysisHistory(transcriptionId);
+        setAnalysisHistory(history);
+        
+        // If there's a current analysis in store, use it
+        if (storeAnalysis && storeAnalysis.transcription_id === transcriptionId) {
+          setCurrentAnalysis(storeAnalysis);
+        } else if (history && history.length > 0) {
+          // Otherwise, use the most recent analysis
+          setCurrentAnalysis(history[0]);
+        }
+      } catch (error) {
+        console.error('Error loading analysis history:', error);
+      }
+    };
+
+    if (transcriptionId) {
+      loadAnalysisHistory();
+    }
+  }, [transcriptionId, storeAnalysis, getAnalysisHistory]);
 
   const getCurrentPrompt = () => {
     if (selectedPromptType === 'custom') {
@@ -172,6 +199,47 @@ export function AnalysisPanel({ transcriptionId, onAnalysisComplete }: AnalysisP
               )}
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Analysis History */}
+      {analysisHistory.length > 1 && (
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <History size={20} className="text-gray-600" />
+            <h4 className="text-lg font-semibold text-gray-900">Previous Analyses</h4>
+          </div>
+          
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {analysisHistory.slice(1).map((analysis, index) => (
+              <div
+                key={analysis.id}
+                onClick={() => setCurrentAnalysis(analysis)}
+                className="p-4 border border-gray-200 rounded-lg cursor-pointer hover:border-purple-300 hover:bg-purple-50 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-sm text-gray-900 capitalize">
+                    {analysis.analysis_type} Analysis
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {formatDistanceToNow(new Date(analysis.created_at), { addSuffix: true })}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600 line-clamp-2">
+                  {analysis.ai_response.substring(0, 100)}...
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* No Analysis Yet */}
+      {!currentAnalysis && !isAnalyzing && (
+        <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+          <Brain className="mx-auto text-gray-400 mb-4" size={48} />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No Analysis Yet</h3>
+          <p className="text-gray-500">Choose an analysis type above and click "Analyze with AI" to get started.</p>
         </div>
       )}
     </div>
