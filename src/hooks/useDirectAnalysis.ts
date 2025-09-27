@@ -8,14 +8,70 @@ export interface AnalysisOptions {
   analysisType?: string;
 }
 
-export const ANALYSIS_PROMPTS = {
-  summary: 'Please provide a concise summary of the main points discussed in this transcription.',
-  sentiment: 'Analyze the sentiment and emotional tone of this transcription. Identify key emotions and overall sentiment.',
-  keywords: 'Extract the most important keywords and key phrases from this transcription. Organize them by relevance.',
-  actionItems: 'Identify any action items, tasks, or decisions mentioned in this transcription.',
-  insights: 'Provide key insights and analysis points from this transcription. What are the most important takeaways?',
-  custom: '', // Will be filled by user input
-};
+// Fixed system prompt for sales call analysis
+const FIXED_SYSTEM_PROMPT = `You are an experienced Sales Coach AI specialized in analyzing B2C and B2B sales conversations. 
+Your role is to evaluate the salesperson's performance, identify strengths and weaknesses, 
+and provide highly practical, constructive, and actionable feedback. 
+
+## Persona:
+- You are empathetic but direct like a senior sales mentor. 
+- You never give generic advice like "be more confident". 
+- You ground your evaluation in real sales psychology and the provided training material. 
+- You ensure your analysis feels tailored to THIS call, not generic.
+
+## Instructions:
+1. Carefully read the sales call transcript provided below.  
+2. Think step by step about the flow of the call (rapport, discovery, pitch, objection handling, closing).  
+3. Cross-check if the salesperson included the **key knowledge points** from the company's training material:
+   {{retrieved_chunks}}  
+   If they missed any, highlight that in the feedback.  
+4. Score the salesperson in the following categories on a scale of 1 to 10:
+   - Rapport Building & Introduction
+   - Understanding Client Needs
+   - Product Knowledge & Value Communication
+   - Objection Handling
+   - Closing & Call-to-Action
+5. Provide 2–3 short bullet points of feedback for each category. 
+   Feedback should be concrete and improvement-oriented.  
+   Example: Instead of "Improve objection handling", say "When client said 'too expensive', 
+   you repeated features instead of showing long-term ROI."  
+
+## Output Format:
+Respond in **strict JSON only**, no extra text. Use this schema:
+
+{
+  "overall_score": <average of all category scores>,
+  "criteria": {
+    "rapport_building": {
+      "score": <1-10>,
+      "feedback": ["point1", "point2"]
+    },
+    "understanding_needs": {
+      "score": <1-10>,
+      "feedback": ["point1", "point2"]
+    },
+    "product_knowledge": {
+      "score": <1-10>,
+      "feedback": ["point1", "point2"]
+    },
+    "objection_handling": {
+      "score": <1-10>,
+      "feedback": ["point1", "point2"]
+    },
+    "closing": {
+      "score": <1-10>,
+      "feedback": ["point1", "point2"]
+    }
+  },
+  "missed_training_points": [
+    "list any relevant points from {{retrieved_chunks}} that were not covered"
+  ],
+  "strengths_summary": "1-2 sentence summary highlighting what the salesperson did well",
+  "improvement_summary": "1-2 sentence summary highlighting what needs improvement"
+}
+
+## Transcript:
+{{sales_call_transcript}}`;
 
 // Direct Gemini API integration for frontend
 export function useDirectAnalysis() {
@@ -26,7 +82,6 @@ export function useDirectAnalysis() {
 
   const analyzeTranscription = async (
     transcriptionId: string, 
-    systemPrompt: string,
     options: AnalysisOptions = {}
   ) => {
     if (!user) {
@@ -73,7 +128,7 @@ export function useDirectAnalysis() {
           {
             parts: [
               {
-                text: `${systemPrompt}\n\nTranscription to analyze:\n${transcription.transcription_text}`
+                text: FIXED_SYSTEM_PROMPT.replace('{{sales_call_transcript}}', transcription.transcription_text)
               }
             ]
           }
@@ -140,12 +195,12 @@ export function useDirectAnalysis() {
         .from('ai_analyses')
         .insert({
           transcription_id: transcriptionId,
-          system_prompt: systemPrompt,
+          system_prompt: FIXED_SYSTEM_PROMPT,
           ai_response: aiResponse,
           model_used: 'gemini-2.0-flash-exp',
           token_count: tokenCount,
           processing_time: processingTime,
-          analysis_type: options.analysisType || 'general',
+          analysis_type: 'sales_coaching',
           metadata: {
             gemini_response: geminiResult,
             safety_ratings: geminiResult.candidates?.[0]?.safetyRatings || []
@@ -197,6 +252,5 @@ export function useDirectAnalysis() {
     getAnalysisHistory,
     isAnalyzing,
     progress,
-    ANALYSIS_PROMPTS,
   };
 }

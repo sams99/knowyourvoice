@@ -1,21 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, Mic, FileAudio, Brain, Sparkles, Play, Pause, Square } from 'lucide-react';
 import { useAudioUpload } from '../../hooks/useAudioUpload';
 import { useAudioRecorder } from '../../hooks/useAudioRecorder';
 import { useDirectTranscription } from '../../hooks/useDirectTranscription';
-import { useDirectAnalysis, ANALYSIS_PROMPTS } from '../../hooks/useDirectAnalysis';
+import { useDirectAnalysis } from '../../hooks/useDirectAnalysis';
 import { useAppStore } from '../../store/useAppStore';
 import { TranscriptionViewer } from '../transcription/TranscriptionViewer';
+import { AnalysisDashboard } from '../analysis/AnalysisDashboard';
 
 export function MainWorkflow() {
-  const [selectedAnalysisType, setSelectedAnalysisType] = useState<keyof typeof ANALYSIS_PROMPTS>('summary');
-  const [customPrompt, setCustomPrompt] = useState('');
+  const [autoProcessingStarted, setAutoProcessingStarted] = useState(false);
   
   const { currentAudioFile, currentTranscription, currentAnalysis, error, setError } = useAppStore();
   
   // Upload and recording hooks
   const { uploadFile, isUploading, uploadProgress } = useAudioUpload();
-  const { startRecording, stopRecording, isRecording, audioBlob } = useAudioRecorder();
+  const { recordingState, startRecording, stopRecording, saveRecording, isSaving } = useAudioRecorder();
   
   // Processing hooks
   const { transcribeAudio, isTranscribing, progress: transcribeProgress } = useDirectTranscription();
@@ -48,6 +48,14 @@ export function MainWorkflow() {
     }
   };
 
+  const handleSaveRecording = async () => {
+    try {
+      await saveRecording();
+    } catch (error) {
+      console.error('Save recording failed:', error);
+    }
+  };
+
   const handleTranscribe = async () => {
     if (!currentAudioFile) return;
     
@@ -62,29 +70,42 @@ export function MainWorkflow() {
     if (!currentTranscription) return;
     
     try {
-      const prompt = selectedAnalysisType === 'custom' ? customPrompt : ANALYSIS_PROMPTS[selectedAnalysisType];
-      if (!prompt.trim()) return;
-      
-      await analyzeTranscription(currentTranscription.id, prompt, {
-        analysisType: selectedAnalysisType,
-      });
+      await analyzeTranscription(currentTranscription.id);
     } catch (error) {
       console.error('Analysis failed:', error);
     }
   };
 
-  const getCurrentPrompt = () => {
-    return selectedAnalysisType === 'custom' ? customPrompt : ANALYSIS_PROMPTS[selectedAnalysisType];
-  };
+  // Auto-process: When audio file is uploaded/recorded, automatically transcribe
+  useEffect(() => {
+    if (currentAudioFile && !currentTranscription && !isTranscribing && !autoProcessingStarted) {
+      console.log('🤖 Auto-transcription started...');
+      setAutoProcessingStarted(true);
+      
+      // Add a small delay to ensure upload is fully complete
+      setTimeout(() => {
+        transcribeAudio(currentAudioFile.id).catch(error => {
+          console.error('Auto-transcription failed:', error);
+          setAutoProcessingStarted(false); // Reset flag on error
+        });
+      }, 1000);
+    }
+  }, [currentAudioFile, currentTranscription, isTranscribing, autoProcessingStarted]);
 
-  const analysisTypes = [
-    { key: 'summary', label: 'Summary', icon: '📝' },
-    { key: 'sentiment', label: 'Sentiment', icon: '😊' },
-    { key: 'keywords', label: 'Keywords', icon: '🏷️' },
-    { key: 'actionItems', label: 'Action Items', icon: '✅' },
-    { key: 'insights', label: 'Insights', icon: '💡' },
-    { key: 'custom', label: 'Custom', icon: '⚙️' },
-  ] as const;
+  // Auto-process: When transcription is complete, automatically analyze
+  useEffect(() => {
+    if (currentTranscription && !currentAnalysis && !isAnalyzing) {
+      console.log('🧠 Auto-analysis started...');
+      analyzeTranscription(currentTranscription.id).catch(error => {
+        console.error('Auto-analysis failed:', error);
+      });
+    }
+  }, [currentTranscription, currentAnalysis, isAnalyzing]);
+
+  // Reset auto-processing flag when audio file changes
+  useEffect(() => {
+    setAutoProcessingStarted(false);
+  }, [currentAudioFile]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -92,6 +113,65 @@ export function MainWorkflow() {
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-700">{error}</p>
+        </div>
+      )}
+
+      {/* Upload Progress */}
+      {isUploading && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
+            <div>
+              <p className="text-yellow-800 font-medium">📤 Uploading audio file...</p>
+              <p className="text-yellow-600 text-sm">{uploadProgress}% complete</p>
+            </div>
+          </div>
+          <div className="mt-3 w-full bg-yellow-200 rounded-full h-2">
+            <div
+              className="bg-yellow-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            ></div>
+          </div>
+        </div>
+      )}
+
+      {/* Auto-Processing Status */}
+      {(isTranscribing || isAnalyzing) && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <div>
+              <p className="text-blue-800 font-medium">
+                {isTranscribing ? '🤖 Auto-transcribing audio...' : '🧠 Auto-analyzing transcription...'}
+              </p>
+              <p className="text-blue-600 text-sm">
+                {isTranscribing ? `${transcribeProgress}% complete` : `${analysisProgress}% complete`}
+              </p>
+            </div>
+          </div>
+          {(isTranscribing || isAnalyzing) && (
+            <div className="mt-3 w-full bg-blue-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${isTranscribing ? transcribeProgress : analysisProgress}%` }}
+              ></div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Completion Status */}
+      {currentAnalysis && !isTranscribing && !isAnalyzing && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+              <span className="text-white text-sm">✓</span>
+            </div>
+            <div>
+              <p className="text-green-800 font-medium">✅ Auto-processing completed!</p>
+              <p className="text-green-600 text-sm">Your sales call has been transcribed and analyzed automatically.</p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -141,26 +221,51 @@ export function MainWorkflow() {
               <h3 className="text-lg font-semibold mb-4">Record Audio</h3>
               <div className="flex flex-col items-center justify-center h-40 border-2 border-gray-300 border-dashed rounded-lg bg-gray-50">
                 <Mic className="w-10 h-10 mb-3 text-gray-400" />
-                <button
-                  onClick={isRecording ? handleStopRecording : handleStartRecording}
-                  className={`px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors ${
-                    isRecording
-                      ? 'bg-red-600 hover:bg-red-700 text-white'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
-                  }`}
-                >
-                  {isRecording ? (
-                    <>
-                      <Square size={18} />
-                      <span>Stop Recording</span>
-                    </>
-                  ) : (
-                    <>
-                      <Mic size={18} />
-                      <span>Start Recording</span>
-                    </>
-                  )}
-                </button>
+                
+                {!recordingState.audioBlob ? (
+                  <button
+                    onClick={recordingState.isRecording ? handleStopRecording : handleStartRecording}
+                    className={`px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors ${
+                      recordingState.isRecording
+                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    {recordingState.isRecording ? (
+                      <>
+                        <Square size={18} />
+                        <span>Stop Recording</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mic size={18} />
+                        <span>Start Recording</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-600">Recording complete! Duration: {Math.floor(recordingState.duration / 60)}:{(recordingState.duration % 60).toString().padStart(2, '0')}</p>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={handleSaveRecording}
+                        disabled={isSaving}
+                        className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg font-medium flex items-center space-x-2"
+                      >
+                        {isSaving ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Save & Auto-Process</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -197,23 +302,13 @@ export function MainWorkflow() {
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900">Transcription</h2>
-            {!currentTranscription && (
+            {!currentTranscription && !isTranscribing && (
               <button
                 onClick={handleTranscribe}
-                disabled={isTranscribing}
-                className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2"
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2"
               >
-                {isTranscribing ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Transcribing... {transcribeProgress}%</span>
-                  </>
-                ) : (
-                  <>
-                    <Play size={16} />
-                    <span>Start Transcription</span>
-                  </>
-                )}
+                <Play size={16} />
+                <span>Start Transcription</span>
               </button>
             )}
           </div>
@@ -245,75 +340,19 @@ export function MainWorkflow() {
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-6">AI Analysis</h2>
           
-          {/* Analysis Type Selection */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Choose Analysis Type
-            </label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {analysisTypes.map((type) => (
-                <button
-                  key={type.key}
-                  onClick={() => setSelectedAnalysisType(type.key)}
-                  className={`p-3 rounded-lg border text-left transition-colors ${
-                    selectedAnalysisType === type.key
-                      ? 'border-purple-500 bg-purple-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2">
-                    <span>{type.icon}</span>
-                    <span className="font-medium">{type.label}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
 
-          {/* Custom Prompt */}
-          {selectedAnalysisType === 'custom' && (
+          {/* Analyze Button - Only show if not auto-processing */}
+          {!isAnalyzing && (
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Custom Prompt
-              </label>
-              <textarea
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                placeholder="Enter your custom analysis prompt..."
-                className="w-full h-24 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
+              <button
+                onClick={handleAnalyze}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-medium flex items-center justify-center space-x-2"
+              >
+                <Sparkles size={18} />
+                <span>Analyze with Gemini Flash-2.0</span>
+              </button>
             </div>
           )}
-
-          {/* Analyze Button */}
-          <div className="mb-6">
-            <button
-              onClick={handleAnalyze}
-              disabled={isAnalyzing || !getCurrentPrompt().trim()}
-              className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium flex items-center justify-center space-x-2"
-            >
-              {isAnalyzing ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Analyzing... {analysisProgress}%</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles size={18} />
-                  <span>Analyze with Gemini Flash-2.0</span>
-                </>
-              )}
-            </button>
-
-            {isAnalyzing && (
-              <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-purple-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${analysisProgress}%` }}
-                ></div>
-              </div>
-            )}
-          </div>
 
           {/* Analysis Results */}
           {currentAnalysis && (
@@ -322,9 +361,9 @@ export function MainWorkflow() {
                 <Brain className="mr-2" size={18} />
                 Analysis Result ({currentAnalysis.analysis_type})
               </h3>
-              <pre className="text-gray-800 leading-relaxed whitespace-pre-wrap font-sans">
-                {currentAnalysis.ai_response}
-              </pre>
+              
+              {/* Use the new dashboard component */}
+              <AnalysisDashboard analysisResponse={currentAnalysis.ai_response} />
             </div>
           )}
 
