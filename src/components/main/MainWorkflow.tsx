@@ -349,7 +349,7 @@ export function MainWorkflow() {
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-medium flex items-center justify-center space-x-2"
               >
                 <Sparkles size={18} />
-                <span>Analyze with Gemini Flash-2.0</span>
+                <span>Analysis</span>
               </button>
             </div>
           )}
